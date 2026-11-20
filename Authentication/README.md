@@ -15,3 +15,7 @@
 ```bash
 python main.py
 ```
+## Test
+```bash
+python -m pytest tests/ -v
+```
