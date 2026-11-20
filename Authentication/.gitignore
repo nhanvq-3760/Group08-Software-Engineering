@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 phonebook.db
-.env
-.idea/
-.vscode/
+__pycache__/
+.pytest_cache/
+venv/
+.venv/
