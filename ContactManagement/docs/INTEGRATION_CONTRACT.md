@@ -1,65 +1,82 @@
-# Member 2 integration contract
+# Member 2 integration contract — aligned with Authentication UserID
 
-## Layered design
+## Team database convention
 
-`UI / API (Member 1, 3) -> ContactController -> ContactService -> ContactRepository -> SQLite/database (Member 4)`
+The **existing Authentication module** owns the SQLite `User` table in
+`Authentication/phonebook.db`. Its columns must remain exactly:
 
-- Business logic does not import FastAPI, Flask, Tkinter, etc.
-- `ContactRepository` is replaceable if Member 4 uses MySQL, PostgreSQL or another DB.
-- All queries use parameters, not concatenated user input.
+`User(UserID, UserName, PasswordHash, Email, CreatedAt)`
 
-## Required database contract — confirm with Member 4
+`UserID` is the primary key. Do **not** rename `UserID` to `id`, and do **not**
+create another `User` table when running against the real Authentication DB.
 
-| Table | Required columns | Relation |
+| Table | Columns | Foreign key |
 |---|---|---|
-| `User` | `id` PK | Main login/user table owned by Member 4 |
-| `Contact` | `id` PK, `user_id` FK, `full_name`, `email`, `address` | `Contact.user_id -> User.id` |
-| `Phone_Number` | `id` PK, `contact_id` FK, `phone_number`, `label` | `Phone_Number.contact_id -> Contact.id`, ON DELETE CASCADE |
-| `Contact_Group` | Defined by Member 3/4 | Groups created by Member 3 |
-| `Contact_Group_Member` | `group_id`, `contact_id` FK | Refers to `Contact.id` |
+| `User` | `UserID` PK, `UserName`, `PasswordHash`, `Email`, `CreatedAt` | Owned by Authentication |
+| `Contact` | `id` PK, `user_id`, `full_name`, `email`, `address` | `Contact.user_id → User.UserID` |
+| `Phone_Number` | `id` PK, `contact_id`, `phone_number`, `label` | `Phone_Number.contact_id → Contact.id` (`ON DELETE CASCADE`) |
+| `Contact_Group` | **Proposed** `id`, `user_id`, `group_name` | Proposed `user_id → User.UserID`; Member 3/4 must approve |
+| `Contact_Group_Member` | **Proposed** `group_id`, `contact_id` | Proposed FKs to `Contact_Group.id` and `Contact.id`; Member 3/4 must approve |
 
-The provided `database/schema_demo.sql` is **only** for Member 2 local tests; do not replace the production DB with this file. In production, when a contact is deleted, Member 4 must also define how related `Contact_Group_Member` rows are handled (typically FK ON DELETE CASCADE).
+**Important distinction:** `UserID` is a column **only of the `User` table**.
+`Contact.id`, `Contact.user_id`, `Phone_Number.id` and `Phone_Number.contact_id`
+are intentionally unchanged. The foreign key column does not have to share
+its name with its referenced primary key.
 
-## Example Member 1 integration
+## How to initialize the production SQLite tables
+
+Run from the repository root in a correctly configured Python import context:
 
 ```python
-import sqlite3
-from contact_management import ContactService, SQLiteContactRepository, ContactController
+from Authentication.database.connection import initialize_database, get_connection
+from ContactManagement.contact_management.auth_integration import initialize_contact_tables
+from ContactManagement.contact_management import ContactController, ContactService, SQLiteContactRepository
 
-connection = sqlite3.connect("team_database.db")
-controller = ContactController(ContactService(SQLiteContactRepository(connection)))
+initialize_database()  # Existing Authentication User table, not recreated by Contact Management
+conn = get_connection()  # Opens Authentication/phonebook.db with FKs enabled
+initialize_contact_tables(conn)
+controller = ContactController(ContactService(SQLiteContactRepository(conn)))
 
-# IMPORTANT: verified_user_id comes from your REAL login/session middleware.
-# Never take it from a client-submitted JSON field.
-verified_user_id = session_user_id  # assigned by Member 1's auth implementation
+# ONLY after a verified login:
+# verified_user_id = auth_service.current_user["user_id"]
+# controller.list(verified_user_id)
+```
+
+Note: The team's Authentication code currently uses top-level imports such as
+`from data_access.user_repository import UserRepository`. For the final GUI
+integration, Member 1 may need to adjust Python package imports. This schema
+patch does **not** wire the two GUIs together.
+
+The standalone demo uses a **different** `demo_contacts.db` database, while
+`database/schema_demo.sql` now has exactly the same five `User` column names as
+Authentication. Demo passwords are placeholders; demo users are not legitimate
+login accounts. Never point the demo launcher to `Authentication/phonebook.db`.
+
+## Layered integration
+
+`GUI (Member 1/3) → ContactController → ContactService → SQLiteContactRepository`
+
+The controller takes a verified `authenticated_user_id` from the login session.
+It must **never** accept an arbitrary client-provided `user_id` as proof of identity.
+
+Existing Controller API:
+
+```python
 new_contact = controller.add(verified_user_id, {
-    "full_name": "Nguyễn Văn An",
-    "email": "an@example.com",
+    "full_name": "Nguyễn Văn An", "email": "an@example.com",
     "phone_numbers": ["0901234567"]
 })
-contacts = controller.list(verified_user_id)
-result = controller.search(verified_user_id, "An")
-controller.edit(verified_user_id, new_contact["id"], {"email": "new@example.com"})
+all_contacts = controller.list(verified_user_id)
+found = controller.search(verified_user_id, "An")
+controller.edit(verified_user_id, new_contact["id"], {"email": "other@example.com"})
 controller.remove(verified_user_id, new_contact["id"])
 ```
 
-## Suggested REST endpoints (Member 1 builds routing)
+## Unresolved production decisions
 
-| HTTP | URL | Controller operation |
-|---|---|---|
-| POST | `/contacts` | `add(current_user_id, payload)` |
-| GET | `/contacts` | `list(current_user_id)` |
-| GET | `/contacts?q=An` | `search(current_user_id, query)` |
-| GET | `/contacts/{id}` | `view(current_user_id, id)` |
-| PUT/PATCH | `/contacts/{id}` | `edit(current_user_id, id, payload)` |
-| DELETE | `/contacts/{id}` | `remove(current_user_id, id)` |
-
-Map `ContactValidationError` to HTTP 400/422 and `ContactNotFound` to HTTP 404. A real web server must manage DB connections per request and validate authentication, cookies/tokens, CSRF, etc.
-
-## Agree on these questions before merge
-
-1. Is backend Python? If Java/C++ is chosen by Member 1, reimplement or expose this Python module through a service/API.
-2. Is production database SQLite, MySQL or PostgreSQL? Adjust repository SQL as needed.
-3. Is one contact permitted to have multiple numbers? This module supports 0–10 numbers.
-4. Should contacts have an `email`, `address`, soft-delete, or extra columns? Align schema.
-5. When a contact is deleted, should Member 3's group membership be cascaded or restricted? Agree with Member 4.
+- The current code uses SQLite; the team must confirm the final production DB choice.
+- Member 3 and Member 4 must approve final group tables and cascades before deployment.
+- The application UI/session connection is not integrated merely because tests pass.
+- Back up real database files before a production schema change.
+- Legacy `User(id, username)` databases are deliberately **rejected** by the
+  initializer rather than silently renamed, because migrations risk data loss.

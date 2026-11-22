@@ -1,7 +1,8 @@
-"""Optional standalone CLI for demoing all 5 Member-2 CRUD features.
+"""Standalone Contact Management CLI using a LOCAL SAMPLE USER, not real login.
 
-Runs with a LOCAL SAMPLE USER only, NOT real login/authentication.
-Usage: python app_contact_cli.py
+Run: python app_contact_cli.py
+This demo's User schema matches Authentication (UserID, UserName, PasswordHash,
+Email, CreatedAt), but uses a placeholder hash and local-only demo database.
 """
 import sqlite3
 from pathlib import Path
@@ -10,16 +11,57 @@ from contact_management.models import ContactNotFound, ContactValidationError
 
 ROOT = Path(__file__).resolve().parent
 DB_FILE = ROOT / "demo_contacts.db"
-USER_ID = 1  # local demonstration account; production MUST use Member-1 session!
+USER_ID = 1  # Local demo only; a real app MUST use the verified Authentication session.
+EXPECTED_USER_COLUMNS = {"UserID", "UserName", "PasswordHash", "Email", "CreatedAt"}
+
+
+def _check_existing_schema(con: sqlite3.Connection) -> None:
+    """Reject a legacy demo database without modifying or deleting its rows."""
+    table_names = {
+        row[0] for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "User" not in table_names:
+        if "Contact" in table_names or "Phone_Number" in table_names:
+            raise RuntimeError("Incomplete old demo database: back up demo_contacts.db and review it.")
+        return
+    cols = {row[1] for row in con.execute('PRAGMA table_info("User")')}
+    if cols != EXPECTED_USER_COLUMNS:
+        raise RuntimeError(
+            "Old demo_contacts.db schema found: expected UserID, UserName, "
+            "PasswordHash, Email, CreatedAt. Data was NOT changed. Back up or "
+            "rename demo_contacts.db, then run the CLI again to create a fresh demo DB."
+        )
+    if "Contact" in table_names:
+        fk = con.execute('PRAGMA foreign_key_list("Contact")').fetchall()
+        if not any(str(row[2]).lower() == "user" and row[3] == "user_id"
+                   and row[4] == "UserID" for row in fk):
+            raise RuntimeError(
+                "Old Contact foreign key found. Data was NOT changed; "
+                "back up demo_contacts.db and review migration before continuing."
+            )
+    if ("Contact" in table_names) != ("Phone_Number" in table_names):
+        raise RuntimeError("Incomplete demo database: back up demo_contacts.db and review it.")
 
 
 def open_demo_database():
     con = sqlite3.connect(DB_FILE)
-    con.executescript((ROOT / "database" / "schema_demo.sql").read_text(encoding="utf-8"))
-    con.execute('INSERT OR IGNORE INTO "User" (id, username) VALUES (?, ?)',
-                (USER_ID, "local_demo_user"))
-    con.commit()
-    return con
+    try:
+        con.execute("PRAGMA foreign_keys = ON")
+        _check_existing_schema(con)
+        con.executescript((ROOT / "database" / "schema_demo.sql").read_text(encoding="utf-8"))
+        con.execute(
+            'INSERT OR IGNORE INTO "User" (UserID, UserName, PasswordHash, Email) '
+            'VALUES (?, ?, ?, ?)',
+            (USER_ID, "local_demo_user", "DEMO_ONLY_NOT_VALID_LOGIN_HASH",
+             "local_demo@example.invalid"),
+        )
+        con.commit()
+        return con
+    except Exception:
+        con.close()
+        raise
 
 
 def render(contacts):
@@ -31,7 +73,11 @@ def render(contacts):
 
 
 def main():
-    con = open_demo_database()
+    try:
+        con = open_demo_database()
+    except (RuntimeError, sqlite3.DatabaseError) as exc:
+        print("Cannot start demo:", exc)
+        return
     service = ContactService(SQLiteContactRepository(con))
     try:
         while True:

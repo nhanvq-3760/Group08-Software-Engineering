@@ -1,63 +1,62 @@
-# Align ContactManagement with Authentication (proposed integration)
+# Complete User schema naming alignment (2026-11-22)
 
-**Source of truth, checked 2026-11-22:** `Authentication/database/connection.py` in the team's GitHub repository. Authentication uses **SQLite** in `Authentication/phonebook.db` and creates:
+## Fixed naming
+
+Authentication's existing SQLite schema is the source of truth:
 
 ```sql
-User(UserID INTEGER PRIMARY KEY AUTOINCREMENT,
-     UserName TEXT UNIQUE, PasswordHash TEXT, Email TEXT UNIQUE,
-     CreatedAt TEXT)
+CREATE TABLE IF NOT EXISTS User (
+    UserID INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserName TEXT NOT NULL UNIQUE,
+    PasswordHash TEXT NOT NULL,
+    Email TEXT NOT NULL UNIQUE,
+    CreatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-**Keep `User.UserID`**. Do not rename Authentication's columns and do not deploy Member 2's `database/schema_demo.sql` against the Authentication database. That SQL uses `User(id,username)` for isolated tests only.
+Both the integration schema and **the local test/demo `schema_demo.sql`** now
+follow these exact five column names. The `Contact.user_id` column references
+`User.UserID`; the `Phone_Number.contact_id` column references `Contact.id`.
+These names are intentionally different because they refer to different tables.
 
-## Correct integration contract
+## What changed in Member 2's source
 
-| Table | Columns / keys | Status |
-|---|---|---|
-| `User` | `UserID` PK, `UserName`, `PasswordHash`, `Email`, `CreatedAt` | Already owned/created by Authentication |
-| `Contact` | `id` PK, `user_id` FK **to `User.UserID`**, `full_name`, `email`, `address` | Added by `schema_auth_contact.sql` |
-| `Phone_Number` | `id` PK, `contact_id` FK to `Contact.id`, `phone_number`, `label` | Added by `schema_auth_contact.sql` |
-| `Contact_Group` | Proposed `id`, `user_id` FK to `User.UserID`, `group_name` | **Not approved**: Member 3/4 must confirm |
-| `Contact_Group_Member` | Proposed `(group_id, contact_id)` PK/FKs | **Not approved**: Member 3/4 must confirm |
+- `database/schema_demo.sql`: local `User` now has `UserID`, `UserName`,
+  `PasswordHash`, `Email`, `CreatedAt`; `Contact.user_id` FK references `UserID`.
+- `demo_member2.py`: inserts sample User with all required User fields.
+- `app_contact_cli.py`: likewise inserts sample User with all required fields;
+  detects/rejects the old demo DB rather than modifying data.
+- `tests/test_contact_management.py`: 24 existing CRUD tests updated to use
+  `UserID`/`UserName`/`PasswordHash`/`Email` and delete by `UserID`.
+- `tests/test_demo_schema_alignment.py`: 4 extra schema/legacy-protection tests.
+- `docs/INTEGRATION_CONTRACT.md` and `README_INTEGRATION.md` updated.
 
-`database/schema_groups_PROPOSED.sql` is a **draft** for Members 3/4; it is never loaded automatically. It includes a trigger preventing a user's group from containing another user's contacts.
+Previous patch files remain valid, especially:
 
-## Initialize against the SAME SQLite connection
+- `contact_management/auth_integration.py`: requires Authentication `User` columns.
+- `database/schema_auth_contact.sql`: correct production Contact/Phone FK schema.
+- `database/schema_groups_PROPOSED.sql`: **proposal only**, not auto-installed.
+- `tests/test_auth_integration.py`: 9 integration tests. **One negative test
+  deliberately constructs obsolete `User(id, username)` to verify it is rejected.**
+  This is not an active schema definition.
 
-From the **repository root** (`Group08-Software-Engineering`), initialize the Authentication-owned database once, then open that same DB and add the Contact tables:
+## Applying without damaging existing databases
 
-```python
-from Authentication.database.connection import initialize_database, get_connection
-from ContactManagement.contact_management.auth_integration import initialize_contact_tables
-from ContactManagement.contact_management import ContactService, SQLiteContactRepository, ContactController
+1. Back up the project and `demo_contacts.db` if it exists. The actual
+   Authentication `phonebook.db` must never be overwritten by the demo.
+2. Copy the revised Member 2 files over the matching paths in `ContactManagement`.
+3. Run `python -m unittest discover -s tests -v` **from `ContactManagement`**.
+   Expected: 37 tests = 24 CRUD + 9 integration + 4 demo-schema alignment.
+4. Run `python demo_member2.py` to verify the in-memory demo.
+5. Before running `python app_contact_cli.py`, check whether the previous
+   `demo_contacts.db` was generated with `User(id,username)`.
+   If so, **rename it**, e.g. `demo_contacts_legacy_backup.db`, then run the CLI
+   to create a new demo DB. Do not delete the backup if you need old contacts.
+   There is no automatic migration of old demo contacts in this patch.
 
-initialize_database()  # Creates/retains Authentication/phonebook.db and User(UserID,...)
-connection = get_connection()
-initialize_contact_tables(connection)
-controller = ContactController(ContactService(SQLiteContactRepository(connection)))
+## Important limits
 
-# On successful AUTHENTICATED login, use the trusted user ID:
-# verified_user_id = auth_service.current_user["user_id"]
-# controller.list(verified_user_id)
-# controller.add(verified_user_id, {"full_name": "An", "phone_numbers": [...]})
-# Close connection at app shutdown; use per-request connections if deployed as a server.
-```
-
-**Security:** Never accept `user_id` from the frontend as authentication. Pass only the verified `current_user["user_id"]` returned by `AuthService.login` / the server session.
-
-## Running tests (does not touch real user data)
-
-```powershell
-cd Group08-Software-Engineering\ContactManagement
-python -m unittest discover -s tests -v
-```
-
-Existing `demo_member2.py` and `app_contact_cli.py` continue to use **the demo SQLite database** and demo `User(id,username)`. This is intentional so the 24 pre-existing standalone tests do not break. The new `test_auth_integration.py` specifically verifies the real Authentication schema and the Contact/Phone FKs in memory.
-
-## Migration / ownership warning
-
-- **Backup** `Authentication/phonebook.db` before modifying a real group database.
-- If `User(id,username)` or `Contact.user_id -> User.id` already exists in that database, `initialize_contact_tables()` raises `SchemaCompatibilityError`. It **does not** rename or destroy data automatically. Agree on a migration with Member 4.
-- The choice of SQLite is grounded in the *currently implemented Authentication module*, not an independent final decision by the whole team.
-- No integrated production schema for all five tables existed in the repository before this patch. The group tables are still pending approval from Members 3/4.
-- Authentication GUI isn't automatically integrated; its UI must call the contact controller after login and share the verified user ID.
+Passing the tests demonstrates compatible SQL/table naming **for the modules
+under test**, not a completed GUI integration. The group-table SQL remains a
+proposal until Members 3 and 4 accept it. The Authentication User table is
+unchanged and is still owned by Member 1.

@@ -1,4 +1,7 @@
-"""Member 2 unit + SQLite integration tests (no external dependencies)."""
+"""Member 2 unit + SQLite integration tests (no external dependencies).
+
+Local User fixtures now use the exact Authentication User column names.
+"""
 import sqlite3
 import unittest
 from pathlib import Path
@@ -14,8 +17,11 @@ class ContactManagementTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.executescript((ROOT / "database" / "schema_demo.sql").read_text(encoding="utf-8"))
-        self.db.executemany('INSERT INTO "User" (id,username) VALUES (?,?)',
-                            [(1, "alice"), (2, "bob")])
+        self.db.executemany(
+            'INSERT INTO "User" (UserID, UserName, PasswordHash, Email) VALUES (?, ?, ?, ?)',
+            [(1, "alice", "TEST_ONLY_HASH_ALICE", "alice@example.invalid"),
+             (2, "bob", "TEST_ONLY_HASH_BOB", "bob@example.invalid")],
+        )
         self.db.commit()
         self.service = ContactService(SQLiteContactRepository(self.db))
         self.controller = ContactController(self.service)
@@ -161,7 +167,7 @@ class ContactManagementTests(unittest.TestCase):
 
     def test_23_delete_user_cascades_contacts(self):
         self.add(1)
-        self.db.execute('DELETE FROM "User" WHERE id = 1')
+        self.db.execute('DELETE FROM "User" WHERE UserID = 1')
         self.db.commit()
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM "Contact"').fetchone()[0], 0)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM "Phone_Number"').fetchone()[0], 0)

@@ -1,19 +1,39 @@
-# Integration patch: Authentication UserID + Contact Management
+# Contact Management — Authentication UserID-aligned code update
 
-This archive contains only **new files**, to place into the existing `Group08-Software-Engineering` repository. It does **not** replace Authentication, existing CRUD code, existing demo schema, or tests.
+The existing Authentication table is kept **unchanged**:
 
-## Install
-1. Back up the repository and any `Authentication/phonebook.db` file.
-2. Extract the archive into the root of the team's repo, preserving `ContactManagement/...` paths.
-3. From the `ContactManagement` folder, run `python -m unittest discover -s tests -v`.
-4. Read `docs/SCHEMA_ALIGNMENT.md` before using a shared DB.
+`User(UserID, UserName, PasswordHash, Email, CreatedAt)`
 
-## Included new files
-- `database/schema_auth_contact.sql` — proper FK `Contact.user_id → User.UserID`.
-- `contact_management/auth_integration.py` — validates Authentication schema and initializes Contact/Phone safely.
-- `tests/test_auth_integration.py` — SQLite compatibility, foreign key, cascade and collision tests.
-- `database/schema_groups_PROPOSED.sql` — **not yet approved**, proposed draft for Member 3/4.
-- `docs/SCHEMA_ALIGNMENT.md` — setup and agreement points.
+Contact Management now uses these same five `User` column names in the local
+demo database, CLI, 24 unit tests and integration checks. Contact and Phone
+keys remain `Contact.id`, `Contact.user_id`, `Phone_Number.id` and
+`Phone_Number.contact_id`; `Contact.user_id` references `User.UserID`.
 
-## Important
-This patch doesn't claim the 4 team modules are fully integrated. GUI wiring and the final group schema remain decisions for the team.
+## Apply the update to the existing team repository
+
+This zip is an **overlay**, not a replacement for the whole project. Extract it
+into the repository root, preserving the `ContactManagement/...` paths. It will
+replace the relevant existing demo, test and documentation files. Keep the
+previous patch's `auth_integration.py`, `schema_auth_contact.sql`,
+`schema_groups_PROPOSED.sql`, and `test_auth_integration.py`.
+
+**Back up `demo_contacts.db` and `Authentication/phonebook.db` before updating**.
+The demo CLI refuses an incompatible old demo database without mutating it.
+For a new demo database, rename old `demo_contacts.db` to
+`demo_contacts_legacy_backup.db` (do not delete it).
+
+```powershell
+cd ContactManagement
+python -m unittest discover -s tests -v
+python demo_member2.py
+python app_contact_cli.py
+```
+
+Expected automated tests: **37** (24 CRUD, 9 Authentication integration,
+4 extra demo schema checks). These tests were executed on the module source
+with the updated patch; repeat in your local Git checkout before pushing.
+
+See `docs/SCHEMA_ALIGNMENT.md` and `docs/INTEGRATION_CONTRACT.md`.
+
+**Not included:** modifying Authentication, actual migrations of old contact
+data, finalized contact-group schema (Member 3/4 approval required), and GUI wiring.
