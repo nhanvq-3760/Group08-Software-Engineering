@@ -1,0 +1,5 @@
+ADD: {'id': 1, 'user_id': 1, 'full_name': 'Nguyễn Văn An', 'email': 'an@example.com', 'address': '', 'phone_numbers': ['0901234567']}
+VIEW: [{'id': 1, 'user_id': 1, 'full_name': 'Nguyễn Văn An', 'email': 'an@example.com', 'address': '', 'phone_numbers': ['0901234567']}]
+SEARCH: [{'id': 1, 'user_id': 1, 'full_name': 'Nguyễn Văn An', 'email': 'an@example.com', 'address': '', 'phone_numbers': ['0901234567']}]
+UPDATE: {'id': 1, 'user_id': 1, 'full_name': 'Nguyễn Văn An Updated', 'email': 'an@example.com', 'address': '', 'phone_numbers': ['0901234567', '+84 912 345 678']}
+DELETE: successful; remaining 0
