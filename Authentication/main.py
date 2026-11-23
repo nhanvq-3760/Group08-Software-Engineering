@@ -6,6 +6,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONTACT_MANAGEMENT_PATH = PROJECT_ROOT / "ContactManagement"
 
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(1, str(PROJECT_ROOT))
+
 sys.path.insert(0, str(CONTACT_MANAGEMENT_PATH))
 
 from presentation.auth_views import AuthApp

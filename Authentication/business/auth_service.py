@@ -1,11 +1,14 @@
+
 import hashlib
 import hmac
 import os
 import re
 from data_access.user_repository import UserRepository
 
+
 class AuthError(Exception):
     pass
+
 
 class AuthService:
     ITERATIONS = 310_000
@@ -58,14 +61,21 @@ class AuthService:
             raise AuthError("Enter your username/email and password.")
 
         user = self.repository.find_by_login(login.strip())
+
         if not user or not self._verify_password(password, user["PasswordHash"]):
             raise AuthError("Invalid username/email or password.")
+
+        if user["is_active"] != 1:
+            raise AuthError("Your account has been deactivated. Please contact the administrator.")
 
         self.current_user = {
             "user_id": user["UserID"],
             "username": user["UserName"],
-            "email": user["Email"]
+            "email": user["Email"],
+            "role": user["role"],
+            "is_active": user["is_active"]
         }
+
         return self.current_user
 
     def update_profile(self, username, email):
@@ -74,6 +84,7 @@ class AuthService:
 
         username = username.strip()
         email = email.strip().lower()
+
         if not username or not email:
             raise AuthError("Username and email are required.")
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -86,8 +97,10 @@ class AuthService:
         self.repository.update_profile(
             self.current_user["user_id"], username, email
         )
+
         self.current_user["username"] = username
         self.current_user["email"] = email
+
         return self.current_user
 
     def logout(self):

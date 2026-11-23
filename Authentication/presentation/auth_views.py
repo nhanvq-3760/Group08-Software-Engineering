@@ -10,7 +10,7 @@ from contact_management import (
     SQLiteContactRepository,
     ContactController,
 )
-
+from admin.admin_gui import open_admin_window
 
 class AuthApp:
     def __init__(self, root):
@@ -157,7 +157,13 @@ class AuthApp:
             self.root, text="Contact Management",
             width=25, command=self.show_contacts
         ).pack(pady=10)
-
+        if user.get("role") == "admin":
+            tk.Button(
+                self.root,
+                text="Admin Management",
+                width=25,
+                command=self.show_admin
+            ).pack(pady=5)
         tk.Button(
             self.root, text="Update Profile",
             width=25, command=self.show_profile
@@ -167,7 +173,20 @@ class AuthApp:
             self.root, text="Log Out",
             width=25, command=self.do_logout
         ).pack(pady=5)
+    def show_admin(self):
+        user = self.auth.current_user
 
+        if user.get("role") != "admin":
+            messagebox.showerror(
+                "Access Denied",
+                "You do not have permission to access Admin Management."
+            )
+            return
+
+        open_admin_window(
+            self.root,
+            user["user_id"]
+        )
     # CONTACT MANAGEMENT
 
     def show_contacts(self):
