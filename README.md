@@ -175,7 +175,7 @@ python -m pytest admin/ -v
 | Member 1 | Authentication, User Profile, and System Integration |
 | Member 2 | Contact Management |
 | Member 3 | Contact Group Management |
-| Member 4 | Database Design, Administration, and Testing |
+| Member 4 | Database Design, Administration |
 
 ## 10. Database
 
