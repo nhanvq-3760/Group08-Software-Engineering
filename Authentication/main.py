@@ -1,5 +1,4 @@
-
-import sys
+﻿import sys
 import tkinter as tk
 from pathlib import Path
 
@@ -14,6 +13,7 @@ sys.path.insert(0, str(CONTACT_MANAGEMENT_PATH))
 from presentation.auth_views import AuthApp
 from database.connection import initialize_database, get_connection
 from contact_management.auth_integration import initialize_contact_tables
+from ContactGroups.database.migration import initialize_contact_group_tables
 
 
 def main():
@@ -22,6 +22,7 @@ def main():
     conn = get_connection()
     try:
         initialize_contact_tables(conn)
+        initialize_contact_group_tables(conn)
     finally:
         conn.close()
 
