@@ -1,4 +1,4 @@
-import sqlite3, unittest
+﻿import sqlite3, unittest
 from contact_groups import SQLiteGroupRepository, ContactGroupService, GroupValidationError, GroupNotFound, ContactNotFound
 
 SCHEMA='''
@@ -12,7 +12,7 @@ class ContactGroupTests(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:'); self.db.executescript(SCHEMA)
         self.db.executemany('INSERT INTO "User" VALUES (?,?)',[(1,'alice'),(2,'bob')])
-        self.db.executemany('INSERT INTO "Contact"(id,user_id,full_name,email,address) VALUES (?,?,?,?,?)',[(11,1,'An','an@x',''),(12,1,'Bình','binh@x',''),(21,2,'Bob','bob@x','')])
+        self.db.executemany('INSERT INTO "Contact"(id,user_id,full_name,email,address) VALUES (?,?,?,?,?)',[(11,1,'An','an@x',''),(12,1,'B├¼nh','binh@x',''),(21,2,'Bob','bob@x','')])
         self.s=ContactGroupService(SQLiteGroupRepository(self.db))
     def tearDown(self): self.db.close()
     def test_create_and_trim_name(self):
